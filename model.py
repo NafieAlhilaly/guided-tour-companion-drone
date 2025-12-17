@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import IntEnum
 
 @dataclass
 class GroupPosition:
@@ -20,3 +21,10 @@ class GroupPosition:
             -180.0 <= self.longitude <= 180.0 and
             self.altitude >= 0.0
         )
+
+class DroneState(IntEnum):
+    INIT = 0
+    MONITOR = 1
+    TO_MED_SUPPLY = 2
+    TO_GROUP = 3
+    LOW_BATTERY = 4

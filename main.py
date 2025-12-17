@@ -1,11 +1,10 @@
 from mavsdk import System
 from mavsdk.action import OrbitYawBehavior
 from mavsdk.mission import MissionItem, MissionPlan
-from asyncio import run, sleep
+from asyncio import run, create_task
 import paho.mqtt.client as mqtt
-from model import GroupPosition
-from enum import IntEnum
-from util import is_position_reached, get_distance_between
+from model import GroupPosition, DroneState
+from util import is_position_reached, get_distance_between, low_battery_checker
 
 from logging import getLogger, INFO, basicConfig
 basicConfig(level=INFO)
@@ -13,13 +12,6 @@ logger = getLogger(__name__)
 
 DRONE_START_LOCATION = [18.373417, 42.3781843]
 INIT_GROUP_LOCATION = [18.373603,42.3778573]
-
-class DroneState(IntEnum):
-    INIT = 0
-    MONITOR = 1
-    TO_MED_SUPPLY = 2
-    TO_GROUP = 3
-    LOW_BATTERY = 4
 
 drone_current_state = DroneState.INIT
 
@@ -80,6 +72,9 @@ async def mission():
         ),
     ]
     med_supply_mission = MissionPlan(med_supply_mission_items)
+    
+    # Create battery check task
+    create_task(low_battery_checker(drone, drone_current_state))
     async for upload_data in drone.mission.upload_mission_with_progress(med_supply_mission):
         progress_percent = round(upload_data.progress * 100)
         logger.info(f"Upload progress: {progress_percent}")
@@ -138,7 +133,7 @@ async def mission():
                     if distance > 13:
                         drone_current_state = DroneState.TO_GROUP
                         break
-                    if drone_current_state is DroneState.TO_MED_SUPPLY:
+                    if drone_current_state is not DroneState.MONITOR:
                         break
             case DroneState.TO_MED_SUPPLY:
                 logger.info("Returning to medical supply location")
