@@ -51,3 +51,7 @@ The drone will do the following:
 
     Or you can use the [Companion App](https://github.com/NafieAlhilaly/guided-tour-companion-app)
 
+## Test
+<video width="1200" height="1000" controls>
+  <source src="./screenshots/test.mp4" type="video/mp4">
+</video>
