@@ -71,7 +71,7 @@ async def get_distance_between(
 
 async def low_battery_checker(drone: System, drone_current_state: DroneState):
     async for battery in drone.telemetry.battery():
-        if battery.remaining_percent <= 50:
+        if battery.remaining_percent <= 20:
             logger.warning(f"Low Battery: {battery.remaining_percent}%")
             logger.warning(f"Returning to home.")
             await drone.action.return_to_launch()
