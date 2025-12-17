@@ -21,8 +21,18 @@ class DroneState(IntEnum):
     TO_GROUP = 3
     LOW_BATTERY = 4
 
+drone_current_state = DroneState.INIT
+
 
 def on_message(client, userdata, msg):
+    if msg.topic == "supplies/medical":
+        logger.info(f"Received message on topic {msg.topic}")
+        logger.info(f"Payload: {msg.payload.decode()}")
+        global drone_current_state
+        drone_current_state = DroneState.TO_MED_SUPPLY
+        logger.info(drone_current_state)
+        return
+
     logger.info(f"Received message on topic {msg.topic}")
     logger.info(f"Payload: {msg.payload.decode()}")
     payload = msg.payload.decode()
@@ -33,14 +43,15 @@ def on_message(client, userdata, msg):
         logger.error(f"Invalid group position received: {payload} - {e}")
 
 async def mission():
+    global drone_current_state
     drone = System()
-    drone_current_state = DroneState.INIT
     await drone.connect(system_address="udp://:14540")
     mqtt_client = mqtt.Client()
     mqtt_client.connect("0.0.0.0", 1883, 60)
     logger.info("Connected to MQTT broker")
     mqtt_client.loop_start()
     mqtt_client.subscribe("flollow/target_location")
+    mqtt_client.subscribe("supplies/medical")
     mqtt_client.on_message = on_message
     mqtt_client.user_data_set(
         GroupPosition(INIT_GROUP_LOCATION[0], INIT_GROUP_LOCATION[1], 0)
@@ -110,7 +121,7 @@ async def mission():
             case DroneState.MONITOR:
                 logger.info("Monitoring group location")
                 await drone.action.do_orbit(
-                    2,
+                    5,
                     3,
                     OrbitYawBehavior.HOLD_FRONT_TO_CIRCLE_CENTER,
                     mqtt_client._userdata.latitude,
@@ -118,19 +129,26 @@ async def mission():
                     await drone.action.get_takeoff_altitude()
                 )
                 while True:
-                    await sleep(5)
                     group_position: GroupPosition = mqtt_client.user_data_get()
                     distance = await get_distance_between(
                     drone,
                     group_position.latitude,
                     group_position.longitude,
                     await drone.action.get_takeoff_altitude())
-                    logger.info(f"Distance => {distance}")
                     if distance > 13:
+                        drone_current_state = DroneState.TO_GROUP
+                        break
+                    if drone_current_state is DroneState.TO_MED_SUPPLY:
+                        break
+            case DroneState.TO_MED_SUPPLY:
+                logger.info("Returning to medical supply location")
+                await drone.mission.start_mission()
+                async for progress_data in drone.mission.mission_progress():
+                    logger.info(f"Medical supply mission progress: {progress_data}")
+                    if progress_data.current == progress_data.total:
+                        await drone.mission.upload_mission(med_supply_mission)
                         break
                 drone_current_state = DroneState.TO_GROUP
-            case DroneState.TO_MED_SUPPLY:
-                pass
             case DroneState.LOW_BATTERY:
                 pass
         
