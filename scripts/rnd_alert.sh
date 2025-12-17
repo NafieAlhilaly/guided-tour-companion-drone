@@ -5,4 +5,4 @@ while true; do
     random_msg=${messages[$RANDOM % ${#messages[@]}]}
     mosquitto_pub -t "/notification/violation_alert" -m "$random_msg"
     sleep 10
-done &
+done
