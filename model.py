@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import IntEnum, Enum
 
 @dataclass
 class GroupPosition:
@@ -28,3 +28,8 @@ class DroneState(IntEnum):
     TO_MED_SUPPLY = 2
     TO_GROUP = 3
     LOW_BATTERY = 4
+
+class MQTTTopic(Enum):
+    MEDICAL_SUPPLY_ALERT_TOPIC = "/notification/med_alert"
+    VIOLATION_ALERT_TOPIC = "/notification/violation_alert"
+    FOLLOW_COMMAND_TOPIC = "/command/follow"

@@ -5,6 +5,7 @@ from asyncio import run, create_task
 import paho.mqtt.client as mqtt
 from model import GroupPosition, DroneState
 from util import is_position_reached, get_distance_between, low_battery_checker
+from model import MQTTTopic
 
 from logging import getLogger, INFO, basicConfig
 basicConfig(level=INFO)
@@ -17,7 +18,7 @@ drone_current_state = DroneState.INIT
 
 
 def on_message(client, userdata, msg):
-    if msg.topic == "supplies/medical":
+    if msg.topic == MQTTTopic.MEDICAL_SUPPLY_ALERT_TOPIC.value:
         logger.info(f"Received message on topic {msg.topic}")
         logger.info(f"Payload: {msg.payload.decode()}")
         global drone_current_state
@@ -42,8 +43,8 @@ async def mission():
     mqtt_client.connect("0.0.0.0", 1883, 60)
     logger.info("Connected to MQTT broker")
     mqtt_client.loop_start()
-    mqtt_client.subscribe("flollow/target_location")
-    mqtt_client.subscribe("supplies/medical")
+    mqtt_client.subscribe(MQTTTopic.FOLLOW_COMMAND_TOPIC.value)
+    mqtt_client.subscribe(MQTTTopic.MEDICAL_SUPPLY_ALERT_TOPIC.value)
     mqtt_client.on_message = on_message
     mqtt_client.user_data_set(
         GroupPosition(INIT_GROUP_LOCATION[0], INIT_GROUP_LOCATION[1], 0)
