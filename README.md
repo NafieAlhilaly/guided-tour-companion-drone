@@ -53,5 +53,5 @@ The drone will do the following:
 
 ## Test
 <video width="1200" height="1000" controls>
-  <source src="./screenshots/test.mp4" type="video/mp4">
+  <source src="https://github.com/NafieAlhilaly/guided-tour-companion-drone/blob/develop/screenshots/test.mp4" type="video/mp4">
 </video>
