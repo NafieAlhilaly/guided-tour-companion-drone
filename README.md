@@ -46,12 +46,13 @@ The drone will do the following:
     - To send test notifications to topics, use the scripts in the `scripts/` folder:
     ```bash
     mosquitto_pub -h localhost -t "notification/topic" -m "test message"
+
+
     ```
     - Refer to scripts in `scripts/` for pre-configured publish examples
 
     Or you can use the [Companion App](https://github.com/NafieAlhilaly/guided-tour-companion-app)
 
 ## Test
-<video width="1200" height="1000" controls>
-  <source src="https://github.com/NafieAlhilaly/guided-tour-companion-drone/blob/develop/screenshots/test.mp4" type="video/mp4">
-</video>
+
+https://github.com/user-attachments/assets/85c33211-5759-46ed-bed0-d3d1d5159017
