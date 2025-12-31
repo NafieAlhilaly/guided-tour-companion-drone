@@ -12,7 +12,7 @@ basicConfig(level=INFO)
 logger = getLogger(__name__)
 
 DRONE_START_LOCATION = [18.373417, 42.3781843]
-INIT_GROUP_LOCATION = [18.373603,42.3778573]
+INIT_GROUP_LOCATION = [18.373465,42.3781875]
 
 drone_current_state = DroneState.INIT
 
@@ -85,14 +85,15 @@ async def mission():
         match drone_current_state:
             case DroneState.INIT:
                 logger.info("Taking off and reaching initial altitude")
-                await drone.action.set_takeoff_altitude(10)
+                await drone.action.set_takeoff_altitude(5)
                 await drone.action.arm()
                 await drone.action.takeoff()
                 while not await is_position_reached(
                     drone,
                     home.latitude_deg,
                     home.longitude_deg,
-                    await drone.action.get_takeoff_altitude()
+                    await drone.action.get_takeoff_altitude(),
+                    0.009
                 ):
                     pass
                 logger.info("Initial altitude reached")
@@ -117,7 +118,7 @@ async def mission():
             case DroneState.MONITOR:
                 logger.info("Monitoring group location")
                 await drone.action.do_orbit(
-                    5,
+                    1,
                     3,
                     OrbitYawBehavior.HOLD_FRONT_TO_CIRCLE_CENTER,
                     mqtt_client._userdata.latitude,
@@ -146,7 +147,7 @@ async def mission():
                         break
                 drone_current_state = DroneState.TO_GROUP
             case DroneState.LOW_BATTERY:
-                pass
+                await drone.action.return_to_launch()
         
 
 
