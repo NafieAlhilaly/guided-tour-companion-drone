@@ -33,3 +33,11 @@ class MQTTTopic(Enum):
     MEDICAL_SUPPLY_ALERT_TOPIC = "/notification/med_alert"
     VIOLATION_ALERT_TOPIC = "/notification/violation_alert"
     FOLLOW_COMMAND_TOPIC = "/command/follow"
+
+class MedicalDroneState(IntEnum):
+    INIT = 0
+    WAIT_FOR_ALERT = 1
+    TO_GROUP = 2
+    WAIT_AT_GROUP = 3
+    RETURN_TO_LAUNCH = 4
+    LOW_BATTERY = 5
