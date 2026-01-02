@@ -109,3 +109,9 @@ Comprehensive testing of all drone capabilities including takeoff, group monitor
 
 https://github.com/user-attachments/assets/53e6caaf-3b80-4540-befc-173b95956abb
 
+
+
+https://github.com/user-attachments/assets/efd97c0b-e035-4b7b-aa13-62483de3fde4
+
+
+
