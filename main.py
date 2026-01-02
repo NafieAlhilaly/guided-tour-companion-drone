@@ -8,11 +8,12 @@ from util import is_position_reached, get_distance_between, low_battery_checker
 from model import MQTTTopic
 
 from logging import getLogger, INFO, basicConfig
+
 basicConfig(level=INFO)
 logger = getLogger(__name__)
 
 DRONE_START_LOCATION = [18.373417, 42.3781843]
-INIT_GROUP_LOCATION = [18.373465,42.3781875]
+INIT_GROUP_LOCATION = [18.373465, 42.3781875]
 
 drone_current_state = DroneState.INIT
 
@@ -30,10 +31,11 @@ def on_message(client, userdata, msg):
     logger.info(f"Payload: {msg.payload.decode()}")
     payload = msg.payload.decode()
     try:
-        group_position = GroupPosition(*map(float, payload.split(',')))
+        group_position = GroupPosition(*map(float, payload.split(",")))
         client.user_data_set(group_position)
     except ValueError as e:
         logger.error(f"Invalid group position received: {payload} - {e}")
+
 
 async def mission():
     global drone_current_state
@@ -61,25 +63,27 @@ async def mission():
             10,
             5,
             True,
-            float('nan'),
-            float('nan'),
+            float("nan"),
+            float("nan"),
             MissionItem.CameraAction.NONE,
-            float('nan'),
-            float('nan'),
-            float('nan'),
-            float('nan'),
-            float('nan'),
+            float("nan"),
+            float("nan"),
+            float("nan"),
+            float("nan"),
+            float("nan"),
             MissionItem.VehicleAction.NONE,
         ),
     ]
     med_supply_mission = MissionPlan(med_supply_mission_items)
-    
+
     # Create battery check task
     create_task(low_battery_checker(drone, drone_current_state))
-    async for upload_data in drone.mission.upload_mission_with_progress(med_supply_mission):
+    async for upload_data in drone.mission.upload_mission_with_progress(
+        med_supply_mission
+    ):
         progress_percent = round(upload_data.progress * 100)
         logger.info(f"Upload progress: {progress_percent}")
-    
+
     while True:
         # TODO: Refactor state machine code
         match drone_current_state:
@@ -93,25 +97,27 @@ async def mission():
                     home.latitude_deg,
                     home.longitude_deg,
                     await drone.action.get_takeoff_altitude(),
-                    0.009
+                    0.009,
                 ):
                     pass
                 logger.info("Initial altitude reached")
                 drone_current_state = DroneState.TO_GROUP
             case DroneState.TO_GROUP:
                 logger.info("Heading to group location")
-                group_altitude = mqtt_client._userdata.altitude + (await drone.action.get_takeoff_altitude())
+                group_altitude = mqtt_client._userdata.altitude + (
+                    await drone.action.get_takeoff_altitude()
+                )
                 await drone.action.goto_location(
                     mqtt_client._userdata.latitude,
                     mqtt_client._userdata.longitude,
                     group_altitude,
-                    0
+                    0,
                 )
                 while not await is_position_reached(
                     drone,
                     mqtt_client._userdata.latitude,
                     mqtt_client._userdata.longitude,
-                    group_altitude
+                    group_altitude,
                 ):
                     pass
                 drone_current_state = DroneState.MONITOR
@@ -123,15 +129,16 @@ async def mission():
                     OrbitYawBehavior.HOLD_FRONT_TO_CIRCLE_CENTER,
                     mqtt_client._userdata.latitude,
                     mqtt_client._userdata.longitude,
-                    await drone.action.get_takeoff_altitude()
+                    await drone.action.get_takeoff_altitude(),
                 )
                 while True:
                     group_position: GroupPosition = mqtt_client.user_data_get()
                     distance = await get_distance_between(
-                    drone,
-                    group_position.latitude,
-                    group_position.longitude,
-                    await drone.action.get_takeoff_altitude())
+                        drone,
+                        group_position.latitude,
+                        group_position.longitude,
+                        await drone.action.get_takeoff_altitude(),
+                    )
                     if distance > 13:
                         drone_current_state = DroneState.TO_GROUP
                         break
@@ -148,8 +155,6 @@ async def mission():
                 drone_current_state = DroneState.TO_GROUP
             case DroneState.LOW_BATTERY:
                 await drone.action.return_to_launch()
-        
-
 
 
 if __name__ == "__main__":
