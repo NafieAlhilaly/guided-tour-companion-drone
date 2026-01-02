@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import IntEnum, Enum
 
+
 @dataclass
 class GroupPosition:
     latitude: float
@@ -17,10 +18,11 @@ class GroupPosition:
     def is_valid(self) -> bool:
         """Check if the position values are within valid ranges."""
         return (
-            -90.0 <= self.latitude <= 90.0 and
-            -180.0 <= self.longitude <= 180.0 and
-            self.altitude >= 0.0
+            -90.0 <= self.latitude <= 90.0
+            and -180.0 <= self.longitude <= 180.0
+            and self.altitude >= 0.0
         )
+
 
 class DroneState(IntEnum):
     INIT = 0
@@ -29,10 +31,12 @@ class DroneState(IntEnum):
     TO_GROUP = 3
     LOW_BATTERY = 4
 
+
 class MQTTTopic(Enum):
     MEDICAL_SUPPLY_ALERT_TOPIC = "/notification/med_alert"
     VIOLATION_ALERT_TOPIC = "/notification/violation_alert"
     FOLLOW_COMMAND_TOPIC = "/command/follow"
+
 
 class MedicalDroneState(IntEnum):
     INIT = 0
