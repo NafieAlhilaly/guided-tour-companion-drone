@@ -31,7 +31,7 @@ async def mission():
     """Main mission logic for medical supply drone."""
     global medical_drone_state
 
-    drone = System(sysid=2)
+    drone = System(port=14541)
     logger.info("Connecting to medical drone with system ID 2 on port 14541")
     await drone.connect(system_address="udp://:14541")
 

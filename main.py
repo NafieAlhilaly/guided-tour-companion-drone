@@ -39,7 +39,7 @@ def on_message(client, userdata, msg):
 
 async def mission():
     global drone_current_state
-    drone = System()
+    drone = System(port=14540)
     await drone.connect(system_address="udp://:14540")
     mqtt_client = mqtt.Client()
     mqtt_client.connect("0.0.0.0", 1883, 60)
@@ -89,7 +89,7 @@ async def mission():
         match drone_current_state:
             case DroneState.INIT:
                 logger.info("Taking off and reaching initial altitude")
-                await drone.action.set_takeoff_altitude(5)
+                await drone.action.set_takeoff_altitude(8)
                 await drone.action.arm()
                 await drone.action.takeoff()
                 while not await is_position_reached(
