@@ -105,3 +105,7 @@ https://github.com/user-attachments/assets/85c33211-5759-46ed-bed0-d3d1d5159017
 ### Gazebo Simulation
 
 Comprehensive testing of all drone capabilities including takeoff, group monitoring (orbit pattern), and medical supply delivery missions.
+
+
+https://github.com/user-attachments/assets/53e6caaf-3b80-4540-befc-173b95956abb
+
