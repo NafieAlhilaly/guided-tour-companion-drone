@@ -1,5 +1,8 @@
 # Guided Tour Companion Drone
 
+
+<img width="1143" height="2048" alt="Untitled design" src="https://github.com/user-attachments/assets/8a431aed-d231-4a8e-a9c9-8437e39858af" />
+
 This project simulates a companion drone system for guided tours, enabling tour guides to ensure group safety and maintain regulation-compliant experiences. The tour guide can control the drone fleet using the [Companion Mobile App](https://github.com/NafieAlhilaly/guided-tour-companion-app), enhancing overall management and security.
 
 ## Features
