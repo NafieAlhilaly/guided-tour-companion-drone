@@ -2,6 +2,8 @@
 
 This project simulates a companion drone system for guided tours, enabling tour guides to ensure group safety and maintain regulation-compliant experiences. The tour guide can control the drone fleet using the [Companion Mobile App](https://github.com/NafieAlhilaly/guided-tour-companion-app), enhancing overall management and security.
 
+The project uses [Ultralytics](https://www.ultralytics.com/) Pose model to detect falls (and other poses), the service repo https://github.com/NafieAlhilaly/ultralytics-pose-service
+
 ## Features
 
 The drone system provides the following capabilities:
