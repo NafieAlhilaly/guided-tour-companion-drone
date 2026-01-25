@@ -1,3 +1,6 @@
 [submodule "PX4-Autopilot"]
 	path = PX4-Autopilot
 	url = https://github.com/PX4/PX4-Autopilot.git
+[submodule "ultralytics-pose-service"]
+	path = ultralytics-pose-service
+	url = https://github.com/NafieAlhilaly/ultralytics-pose-service.git
