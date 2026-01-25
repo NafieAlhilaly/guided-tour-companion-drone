@@ -9,6 +9,7 @@ This project simulates a companion drone system for guided tours, enabling tour 
 - **companion_drone/** - Python mission logic, drone control scripts, and utilities
 - **ros2_ws/** - ROS2 workspace with image-to-MQTT bridge package
 - **scripts/** - Helper scripts for deployment and testing
+- **buildroot-external/** - For building companion computer Embedded Linux image.
 
 ## Quick Links
 
