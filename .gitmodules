@@ -4,3 +4,6 @@
 [submodule "ultralytics-pose-service"]
 	path = ultralytics-pose-service
 	url = https://github.com/NafieAlhilaly/ultralytics-pose-service.git
+[submodule "buildroot"]
+	path = buildroot
+	url = https://github.com/buildroot/buildroot.git
