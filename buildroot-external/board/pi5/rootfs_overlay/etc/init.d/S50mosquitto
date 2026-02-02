@@ -1,0 +1,60 @@
+#!/bin/sh
+#
+# Start Mosquitto MQTT Broker
+#
+
+DAEMON=/usr/sbin/mosquitto
+PIDFILE=/var/run/mosquitto.pid
+CONFIG=/etc/mosquitto/mosquitto.conf
+
+start() {
+    printf "Starting mosquitto: "
+    
+    # Create necessary directories
+    mkdir -p /var/lib/mosquitto
+    mkdir -p /var/log/mosquitto
+    mkdir -p /var/run/mosquitto
+    
+    # Start mosquitto in background
+    start-stop-daemon -S -q -p $PIDFILE --exec $DAEMON -- \
+        -c $CONFIG -d
+    
+    if [ $? -eq 0 ]; then
+        echo "OK"
+    else
+        echo "FAIL"
+    fi
+}
+
+stop() {
+    printf "Stopping mosquitto: "
+    start-stop-daemon -K -q -p $PIDFILE
+    if [ $? -eq 0 ]; then
+        echo "OK"
+    else
+        echo "FAIL"
+    fi
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart|reload)
+    restart
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+esac
+
+exit $?
