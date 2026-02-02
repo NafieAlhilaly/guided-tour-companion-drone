@@ -1,0 +1,87 @@
+#!/bin/sh
+# filepath: /etc/init.d/S35wlan_modules
+
+WPA_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
+IFACE="wlan0"
+
+install_wlan_modules() {
+  modprobe brcmutil || return 1
+  modprobe brcmfmac || return 1
+  return 0
+}
+
+uninstall_wlan_modules() {
+  # Stop networking before removing modules
+  /sbin/dhcpcd -k "$IFACE" 2>/dev/null
+  /usr/bin/killall wpa_supplicant 2>/dev/null
+  
+  rmmod brcmfmac || return 1
+  rmmod brcmutil || return 1
+  return 0
+}
+
+wait_for_interface() {
+  # Wait up to 10 seconds for the interface to appear specifically
+  count=0
+  while [ $count -lt 10 ]; do
+    if [ -d "/sys/class/net/$IFACE" ]; then
+      return 0
+    fi
+    sleep 1
+    count=$((count+1))
+  done
+  return 1
+}
+
+case "$1" in
+  start)
+    printf "Installing wlan modules... "
+    if install_wlan_modules; then
+      echo "OK"
+      
+      printf "Waiting for interface $IFACE... "
+      if wait_for_interface; then
+        echo "OK"
+        
+        printf "Starting WiFi connection... "
+        # Check if config exists
+        if [ ! -f "$WPA_CONF" ]; then
+            echo "FAIL (Config $WPA_CONF missing)"
+            exit 1
+        fi
+
+        # Start wpa_supplicant in background
+        /usr/sbin/wpa_supplicant -B -i "$IFACE" -c "$WPA_CONF" -D nl80211
+        
+        # Start DHCP client (background mode -b so boot doesn't hang if no wifi)
+        /sbin/dhcpcd -b "$IFACE"
+        echo "OK"
+      else
+        echo "FAIL (Interface did not appear)"
+        exit 1
+      fi
+    else
+      echo "FAIL"
+      exit 1
+    fi
+    ;;
+    
+  stop)
+    printf "Uninstalling wlan modules... "
+    uninstall_wlan_modules
+    [ $? -eq 0 ] && echo "OK" || echo "FAIL"
+    ;;
+    
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+    
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+exit $?
