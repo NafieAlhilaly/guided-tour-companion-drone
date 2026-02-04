@@ -1,0 +1,19 @@
+#!/bin/sh
+
+case "$1" in
+  start)
+    printf "Loading camera modules: "
+    modprobe uvcvideo
+    echo "OK"
+    ;;
+  stop)
+    printf "Unloading camera modules: "
+    rmmod uvcvideo
+    echo "OK"
+    ;;
+  *)
+    echo "Usage: $0 {start|stop}"
+    exit 1
+esac
+
+exit 0
