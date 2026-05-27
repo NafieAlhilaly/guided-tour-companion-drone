@@ -36,6 +36,7 @@ class MQTTTopic(Enum):
     MEDICAL_SUPPLY_ALERT_TOPIC = "/notification/med_alert"
     VIOLATION_ALERT_TOPIC = "/notification/violation_alert"
     FOLLOW_COMMAND_TOPIC = "/command/follow"
+    ALERT_NOTIFICATION_TOPIC = "/notification/alert_notification"
 
 
 class MedicalDroneState(IntEnum):

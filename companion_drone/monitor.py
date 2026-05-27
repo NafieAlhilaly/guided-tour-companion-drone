@@ -1,79 +1,35 @@
 import cv2
-import base64
-import json
 import time
-import asyncio
 from typing import Optional
-import paho.mqtt.client as mqtt
-from dataclasses import dataclass
 import logging
 from ultralytics import YOLO
 import numpy as np
+from ffmpeg_capture import FFmpegCapture, FFmpegConfig
+import asyncio
+import paho.mqtt.client as mqtt
+import base64
+import json
+from model import MQTTTopic
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@dataclass
-class PoseStreamConfig:
-    device_path: str = "/dev/video0"
-    mqtt_broker: str = "localhost"
-    mqtt_port: int = 1883
-    mqtt_topic: str = "drone/camera/pose"
-    fps: int = 10
-    width: Optional[int] = None
-    height: Optional[int] = None
-    model_path: str = "yolo11n-pose.pt"
-
-class PoseStreamService:
-    def __init__(self, config: PoseStreamConfig):
-        self.config = config
-        self.mqtt_client: Optional[mqtt.Client] = None
-        self.capture: Optional[cv2.VideoCapture] = None
+class PoseProcessor:
+    def __init__(self, model_path: str = "yolo11n-pose.pt"):
         self.running = False
         self.frame_count = 0
-        self.model = YOLO(self.config.model_path, "pose")
-
-    def setup_mqtt(self) -> bool:
+        logger.info(f"Loading pose model: {model_path}")
+        self.model = YOLO(model_path, "pose")
+        
+        # Initialize MQTT client for safety alerts
+        self.mqtt_client = mqtt.Client()
         try:
-            self.mqtt_client = mqtt.Client()
-            self.mqtt_client.on_connect = self._on_connect
-            self.mqtt_client.on_disconnect = self._on_disconnect
-            logger.info(f"Connecting to MQTT broker at {self.config.mqtt_broker}:{self.config.mqtt_port}")
-            self.mqtt_client.connect(self.config.mqtt_broker, self.config.mqtt_port, 60)
+            # Connect to the local broker (localhost)
+            self.mqtt_client.connect("127.0.0.1", 1883, 60)
             self.mqtt_client.loop_start()
-            return True
+            logger.info("MQTT client connected for Fall Detection alerts")
         except Exception as e:
-            logger.error(f"Failed to setup MQTT: {e}")
-            return False
-
-    def _on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
-            logger.info("Connected to MQTT broker")
-        else:
-            logger.error(f"Failed to connect to MQTT broker with code: {rc}")
-
-    def _on_disconnect(self, client, userdata, rc):
-        logger.warning(f"Disconnected from MQTT broker with code: {rc}")
-
-    def setup_camera(self) -> bool:
-        try:
-            logger.info(f"Opening video device: {self.config.device_path}")
-            self.capture = cv2.VideoCapture(self.config.device_path)
-            if not self.capture.isOpened():
-                logger.error(f"Failed to open video device: {self.config.device_path}")
-                return False
-            if self.config.width and self.config.height:
-                self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.width)
-                self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
-            self.capture.set(cv2.CAP_PROP_FPS, self.config.fps)
-            actual_width = int(self.capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-            actual_height = int(self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            actual_fps = self.capture.get(cv2.CAP_PROP_FPS)
-            logger.info(f"Camera initialized: {actual_width}x{actual_height} @ {actual_fps} FPS")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to setup camera: {e}")
-            return False
+            logger.error(f"Failed to connect MQTT for PoseProcessor: {e}")
 
     def _kp_person_lying(self, kps: np.ndarray, frame_shape: tuple) -> bool:
         """
@@ -139,30 +95,12 @@ class PoseStreamService:
         except Exception:
             return None
 
-    def publish_alert(self, alert_payload: dict) -> bool:
-        try:
-            if not self.mqtt_client or not self.mqtt_client.is_connected():
-                logger.warning("MQTT client not connected, skipping alert")
-                return False
-            payload_json = json.dumps(alert_payload)
-            result = self.mqtt_client.publish("notification/alert", payload_json, qos=1)
-            if result.rc != mqtt.MQTT_ERR_SUCCESS:
-                logger.warning(f"Failed to publish alert: {result.rc}")
-                return False
-            logger.info("Published lying-down alert")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to publish alert: {e}")
-            return False
-
-    def process_frame(self, frame) -> Optional[dict]:
+    def process(self, frame: np.ndarray) -> np.ndarray:
         try:
             # Run pose estimation and draw results on the frame
-            results = self.model(frame)
+            results = self.model(frame, verbose=False)
             # Ultralytics returns a Results object or list; get the first result
             res = results[0] if isinstance(results, list) else results
-            # annotated image
-            annotated_frame = res.plot()
 
             # Determine if any person is lying down
             lying_detected = False
@@ -212,114 +150,74 @@ class PoseStreamService:
 
             # if lying detected, send alert
             if lying_detected:
-                alert_payload = {
-                    "alert": "lying_down",
-                    "timestamp": time.time(),
-                    "frame_id": f"frame_{self.frame_count}",
-                    "device": self.config.device_path
-                }
-                # publish alert (non-blocking)
+                logger.warning(f"Fall detected at frame {self.frame_count}! Sending alert...")
                 try:
-                    self.publish_alert(alert_payload)
-                except Exception:
-                    logger.exception("Failed publishing alert")
+                    annotated_frame = res.plot()
+                    _, buffer = cv2.imencode('.jpg', annotated_frame)
+                    img_base64 = base64.b64encode(buffer).decode('utf-8')
+                    
+                    payload = {
+                        "message": "Fall detected",
+                        "image": img_base64
+                    }
+                    self.mqtt_client.publish(MQTTTopic.ALERT_NOTIFICATION_TOPIC.value, json.dumps(payload))
+                except Exception as e:
+                    logger.error(f"Failed to send MQTT alert: {e}")
 
-            # Encode the annotated frame as JPEG
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), getattr(self.config, "image_quality", 90)]
-            ret, buffer = cv2.imencode(".jpg", annotated_frame, encode_param)
-            if not ret:
-                logger.error("Failed to encode frame as JPEG")
-                return None
-            image_base64 = base64.b64encode(buffer).decode("utf-8")
-            timestamp = time.time()
-            payload = {
-                "image": image_base64,
-                "timestamp": timestamp,
-                "width": annotated_frame.shape[1],
-                "height": annotated_frame.shape[0],
-                "frame_id": f"frame_{self.frame_count}",
-                "encoding": "jpeg",
-                "quality": getattr(self.config, "image_quality", 90),
-                "device": self.config.device_path,
-            }
             self.frame_count += 1
-            return payload
+            # Return the original raw frame to keep the WebRTC stream clean
+            return frame
         except Exception as e:
             logger.error(f"Failed to process frame: {e}")
-            return None
+            return frame
 
-    def publish_pose(self, payload: dict) -> bool:
-        try:
-            if not self.mqtt_client or not self.mqtt_client.is_connected():
-                logger.warning("MQTT client not connected, skipping pose")
-                return False
-            payload_json = json.dumps(payload)
-            result = self.mqtt_client.publish(
-                self.config.mqtt_topic,
-                payload_json,
-                qos=0
-            )
-            if result.rc != mqtt.MQTT_ERR_SUCCESS:
-                logger.warning(f"Failed to publish pose: {result.rc}")
-                return False
-            return True
-        except Exception as e:
-            logger.error(f"Failed to publish pose: {e}")
-            return False
+class PoseStreamService:
+    """Optional standalone service for pose detection without MQTT."""
+    def __init__(self, video_device="/dev/video0", width=640, height=480, fps=10):
+        self.ffmpeg = FFmpegCapture(FFmpegConfig(
+            video_device=video_device,
+            width=width,
+            height=height,
+            fps=fps
+        ))
+        self.processor = PoseProcessor()
+        self.running = False
 
     async def stream_loop(self):
         logger.info("Starting pose stream loop")
-        frame_interval = 1.0 / self.config.fps
+        loop = asyncio.get_running_loop()
+        width = self.ffmpeg.config.width
+        height = self.ffmpeg.config.height
+        
         while self.running:
-            start_time = time.time()
-            ret, frame = self.capture.read()
-            if not ret:
-                logger.warning("Failed to read frame from camera")
-                await asyncio.sleep(frame_interval)
+            frame_data = await loop.run_in_executor(None, self.ffmpeg.read_frame)
+            
+            if frame_data is None:
+                await asyncio.sleep(0.01)
                 continue
-            payload = self.process_frame(frame)
-            if payload:
-                self.publish_pose(payload)
-                if self.frame_count % 10 == 0:
-                    logger.info(f"Processed {self.frame_count} frames")
-            elapsed = time.time() - start_time
-            sleep_time = max(0, frame_interval - elapsed)
-            await asyncio.sleep(sleep_time)
+
+            frame = np.frombuffer(frame_data, dtype=np.uint8).reshape(
+                (height, width, 3)
+            )
+
+            # Process frame
+            await loop.run_in_executor(None, self.processor.process, frame)
+
+            if self.processor.frame_count % 10 == 0:
+                logger.info(f"Processed {self.processor.frame_count} frames")
 
     async def start(self):
-        logger.info("Starting Pose Stream Service")
-        if not self.setup_mqtt():
-            logger.error("Failed to setup MQTT, cannot start service")
-            return
-        if not self.setup_camera():
-            logger.error("Failed to setup camera, cannot start service")
+        if not self.ffmpeg.start():
             return
         self.running = True
         await self.stream_loop()
 
     def stop(self):
-        logger.info("Stopping Pose Stream Service")
         self.running = False
-        if self.capture:
-            self.capture.release()
-            logger.info("Camera released")
-        if self.mqtt_client:
-            self.mqtt_client.loop_stop()
-            self.mqtt_client.disconnect()
-            logger.info("MQTT disconnected")
+        self.ffmpeg.stop()
 
 async def main():
-    config = PoseStreamConfig(
-        device_path="/dev/video0",
-        mqtt_broker="localhost",
-        mqtt_port=1883,
-        mqtt_topic="drone/camera/pose",
-        fps=10,
-        width=640,
-        height=480,
-        model_path="yolo11n-pose.pt"
-    )
-    service = PoseStreamService(config)
+    service = PoseStreamService()
     try:
         await service.start()
     except KeyboardInterrupt:
