@@ -1,6 +1,7 @@
 import asyncio
 import os
 import logging
+import json
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
@@ -41,6 +42,8 @@ PLAYER_HTML="""<!DOCTYPE html>
                         <div>Frames: <span id="frames">0</span></div>
                         <div>Connection: <span id="connection">idle</span></div>
                         <div>Bitrate: <span id="bitrate">0</span> kbps</div>
+                        <div>Latency: <span id="latency">N/A</span></div>
+                        <div>Server Frames: <span id="server-frames">0</span></div>
                     </div>
 
                     <script src="https://cdn.jsdelivr.net/npm/webrtc-adapter@8.1.1/out/adapter.js"></script>
@@ -55,6 +58,9 @@ PLAYER_HTML="""<!DOCTYPE html>
                                 pc = new RTCPeerConnection({
                                     iceServers: []
                                 });
+
+                                // Create data channel to ensure SCTP negotiation in the Offer
+                                pc.createDataChannel('latency-tracer');
 
                                 // Request to receive video from the server
                                 pc.addTransceiver('video', { direction: 'recvonly' });
@@ -77,6 +83,28 @@ PLAYER_HTML="""<!DOCTYPE html>
                                     }
                                 };
 
+                                pc.ondatachannel = (event) => {
+                                    const dataChannel = event.channel;
+                                    console.log('Data channel received:', dataChannel.label);
+                                    if (dataChannel.label === 'latency-tracer') {
+                                        dataChannel.onmessage = (msgEvent) => {
+                                            try {
+                                                const data = JSON.parse(msgEvent.data);
+                                                const now = Date.now() * 1_000_000; // Convert to ns
+                                                const ingressTimeNs = data.ts;
+                                                const serverFrameCount = data.f;
+                                                const latencyMs = (now - ingressTimeNs) / 1_000_000; // Latency in ms
+                                                document.getElementById('latency').textContent = latencyMs.toFixed(2) + 'ms';
+                                                document.getElementById('server-frames').textContent = serverFrameCount;
+                                            } catch (e) {
+                                                console.error('Error parsing data channel message:', e);
+                                            }
+                                        };
+                                        dataChannel.onopen = () => console.log('Latency data channel opened');
+                                        dataChannel.onclose = () => console.log('Latency data channel closed');
+                                        dataChannel.onerror = (error) => console.error('Latency data channel error:', error);
+                                    }
+                                };
                                 const offer = await pc.createOffer();
                                 await pc.setLocalDescription(offer);
 
@@ -163,6 +191,7 @@ class WebRTCServer:
         self.ffmpeg = FFmpegCapture(FFmpegConfig())
         self.pcs = set()
         self.video_track = None
+        self.data_channels = set()
     
     async def handle_offer(self, request):
         try:
@@ -182,15 +211,29 @@ class WebRTCServer:
             @pc.on("connectionstatechange")
             async def on_state_change():
                 logger.info(f"State: {pc.connectionState}")
-                if pc.connectionState == "failed":
+                if pc.connectionState in ["failed", "closed", "disconnected"]:
                     await pc.close()
                     self.pcs.discard(pc)
 
-            # Explicitly handle data channels if offered. Flutter/Google WebRTC often 
-            # requires the SCTP section to be present in the answer if it was in the offer.
+            # Proactively create the data channel on the server side. This ensures SCTP 
+            # is negotiated in the Answer even if not present in the Offer, which is 
+            # often required for Flutter/Google WebRTC clients to receive data.
+            channel = pc.createDataChannel("latency-tracer")
+            self.data_channels.add(channel)
+
+            @channel.on("close")
+            def on_close():
+                logger.info("Latency data channel closed")
+                self.data_channels.discard(channel)
+
+            # Also listen for data channels initiated by the client
             @pc.on("datachannel")
             def on_datachannel(channel):
-                logger.info(f"Data channel received: {channel.label}")
+                logger.info(f"Data channel established: {channel.label}")
+                self.data_channels.add(channel)
+                @channel.on("close")
+                def on_close():
+                    self.data_channels.discard(channel)
 
             await pc.setRemoteDescription(offer)
 
@@ -226,13 +269,34 @@ class WebRTCServer:
     
     async def handle_player(self, request):
         return web.Response(body=PLAYER_HTML, content_type="text/html")
-    
+
+    async def _tracer_loop(self):
+        """Broadcaster to send timestamps over data channels."""
+        last_sent_f = -1
+        while True:
+            if self.video_track and self.data_channels:
+                current_f = self.video_track.frame_count
+                # Only send when a new frame is captured/processed to reduce traffic
+                if current_f != last_sent_f:
+                    payload = json.dumps({
+                        "f": current_f,
+                        "ts": self.video_track.latest_ingress_timestamp
+                    })
+                    for dc in list(self.data_channels):
+                        if dc.readyState == "open":
+                            dc.send(payload)
+                    last_sent_f = current_f
+            await asyncio.sleep(0.01) # Poll frequently for low-latency delivery
+
     async def start(self, host="0.0.0.0", port=8080):
         if not self.ffmpeg.start():
             logger.error("FFmpeg failed")
             return
         
         self.video_track = CameraVideoTrack(self.ffmpeg)
+        
+        # Start sideband tracer task
+        asyncio.create_task(self._tracer_loop())
         
         app = web.Application()
         app.router.add_post("/offer", self.handle_offer)

@@ -3,8 +3,9 @@ import logging
 import fcntl
 import os
 import select
+import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,8 @@ class FFmpegCapture:
             logger.error(f"FFmpeg start failed: {e}")
             return False
     
-    def read_frame(self) -> Optional[bytes]:
+    def read_frame(self) -> Optional[Tuple[bytes, float]]:
+        """Returns a tuple of (frame_data, capture_timestamp_ns)"""
         if not self.process or self.process.poll() is not None:
             logger.warning("FFmpeg process not running")
             return None
@@ -82,7 +84,8 @@ class FFmpegCapture:
 
                 frame_data = self._read_exact(frame_size)
                 if frame_data:
-                    latest_frame = frame_data
+                    # Record time immediately after reading from pipe
+                    latest_frame = (frame_data, time.time_ns())
                 else:
                     break
             
