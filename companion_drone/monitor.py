@@ -191,12 +191,23 @@ class PoseStreamService:
         
         while self.running:
             frame_data = await loop.run_in_executor(None, self.ffmpeg.read_frame)
-            
+
+            # FFmpegCapture.read_frame returns either None or (frame_bytes, timestamp_ns)
             if frame_data is None:
                 await asyncio.sleep(0.01)
                 continue
 
-            frame = np.frombuffer(frame_data, dtype=np.uint8).reshape(
+            # Unpack tuple if needed
+            if isinstance(frame_data, tuple):
+                frame_bytes, _timestamp_ns = frame_data
+            else:
+                frame_bytes = frame_data
+
+            if frame_bytes is None:
+                await asyncio.sleep(0.01)
+                continue
+
+            frame = np.frombuffer(frame_bytes, dtype=np.uint8).reshape(
                 (height, width, 3)
             )
 
